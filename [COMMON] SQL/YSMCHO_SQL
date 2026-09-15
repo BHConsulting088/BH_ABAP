@@ -33,7 +33,9 @@ DATA : GS_LAYO         TYPE LVC_S_LAYO,
        GO_CONTAINER_RU TYPE REF TO CL_GUI_CONTAINER,
        GO_CONTAINER_RD TYPE REF TO CL_GUI_CONTAINER,
        GO_CONTAINER_LU TYPE REF TO CL_GUI_CONTAINER,
-       GO_CONTAINER_LD TYPE REF TO CL_GUI_CONTAINER.
+       GO_CONTAINER_LD TYPE REF TO CL_GUI_CONTAINER,
+       GO_ALV_GIRD_L   TYPE REF TO CL_GUI_ALV_GRID,
+       GO_ALV_GIRD_R   TYPE REF TO CL_GUI_ALV_GRID.
 
 " ABAP Editor
 DATA : GO_EDIT_L      TYPE REF TO CL_GUI_ABAPEDIT,
@@ -47,6 +49,11 @@ CONSTANTS : SAVING_TABLE_NAME      TYPE TABNAME   VALUE 'ZSMCHO_SQL',
             DATA_FIELDNAME_L       TYPE FIELDNAME VALUE 'DATA_LEFT',
             DATA_FIELDNAME_R       TYPE FIELDNAME VALUE 'DATA_RIGHT',
             ABAP_EDITOR_MAX_LENGTH TYPE I VALUE 255.
+
+TYPES : BEGIN OF TS_EDIT,
+          TEXT TYPE CHAR255,
+        END OF TS_EDIT,
+        TY_EDIT TYPE TABLE OF TS_EDIT.
 
 **********************************************************************
 * Main
@@ -150,6 +157,12 @@ MODULE USER_COMMAND_0100 INPUT.
   CASE OK_CODE.
     WHEN 'BACK'.
       LEAVE TO SCREEN 0.
+    WHEN 'LEFT'.
+      PERFORM RUN USING : GO_ALV_GIRD_L GO_EDIT_L.
+    WHEN 'RIGHT'.
+
+    WHEN 'ALL'.
+
   ENDCASE.
 
 ENDMODULE.
@@ -161,6 +174,8 @@ FORM CREATE_OBJECT .
   PERFORM CREATE_CONTAINER.
   PERFORM CREATE_GUI_EDITOR USING : GO_EDIT_L GO_CONTAINER_LU GO_COMPLETER_L,
                                     GO_EDIT_R GO_CONTAINER_RU GO_COMPLETER_R.
+  PERFORM SET_GRID USING : GO_CONTAINER_LD GO_ALV_GIRD_L DATA_FIELDNAME_L,
+                           GO_CONTAINER_RD GO_ALV_GIRD_R DATA_FIELDNAME_R.
 
 ENDFORM.
 *&---------------------------------------------------------------------*
@@ -267,6 +282,49 @@ FORM CREATE_GUI_EDITOR USING PO_EDIT      TYPE REF TO CL_GUI_ABAPEDIT
 
 ENDFORM.
 *&---------------------------------------------------------------------*
+*&      Form  SET_GRID
+*&---------------------------------------------------------------------*
+FORM SET_GRID USING PO_CONTAINER      TYPE REF TO CL_GUI_CONTAINER
+                    PO_ALV_GIRD       TYPE REF TO CL_GUI_ALV_GRID
+                    PV_DATA_FIELDNAME TYPE FIELDNAME.
+
+  DATA : LV_WHERE TYPE STRING,
+         LV_DATA  TYPE XSTRING,
+         LT_EDIT  TYPE TY_EDIT.
+
+  IF EXIST_SAVING_TABLE = ABAP_TRUE.
+    LV_WHERE = |{ USER_FIELDNAME } = @SY-UNAME|.
+    SELECT SINGLE (PV_DATA_FIELDNAME) FROM (SAVING_TABLE_NAME)
+      WHERE (LV_WHERE)
+      INTO @LV_DATA.
+
+    IF LV_DATA IS NOT INITIAL.
+      CALL FUNCTION 'SCMS_XSTRING_TO_BINARY'
+        EXPORTING
+          BUFFER     = LV_DATA
+        TABLES
+          BINARY_TAB = LT_EDIT.
+    ENDIF.
+
+  ENDIF.
+
+  CREATE OBJECT PO_ALV_GIRD
+    EXPORTING
+      I_PARENT          = PO_CONTAINER    " Parent Container
+    EXCEPTIONS
+      ERROR_CNTL_CREATE = 1
+      ERROR_CNTL_INIT   = 2
+      ERROR_CNTL_LINK   = 3
+      ERROR_DP_CREATE   = 4
+      OTHERS            = 5.
+
+  IF SY-SUBRC <> 0.
+    MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+               WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+  ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
 *&      Form  SET_LAYO
 *&---------------------------------------------------------------------*
 FORM SET_LAYO .
@@ -297,5 +355,14 @@ ENDFORM.
 *&      Form  REFRESH_ALV
 *&---------------------------------------------------------------------*
 FORM REFRESH_ALV .
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  RUN
+*&---------------------------------------------------------------------*
+FORM RUN  USING PO_GRID TYPE REF TO CL_GUI_ALV_GRID
+                PO_EDIT TYPE REF TO CL_GUI_ABAPEDIT.
+
+
 
 ENDFORM.
