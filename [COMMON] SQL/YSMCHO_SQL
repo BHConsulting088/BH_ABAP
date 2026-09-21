@@ -48,7 +48,8 @@ CONSTANTS : SAVING_TABLE_NAME      TYPE TABNAME   VALUE 'ZSMCHO_SQL',
             USER_FIELDNAME         TYPE FIELDNAME VALUE 'ZUSER',
             DATA_FIELDNAME_L       TYPE FIELDNAME VALUE 'DATA_LEFT',
             DATA_FIELDNAME_R       TYPE FIELDNAME VALUE 'DATA_RIGHT',
-            ABAP_EDITOR_MAX_LENGTH TYPE I VALUE 255.
+            ABAP_EDITOR_MAX_LENGTH TYPE I VALUE 255,
+            TEMPORARY_ITAB_NAME    TYPE FIELDNAME VALUE 'LT_DATA'.
 
 TYPES : BEGIN OF TS_EDIT,
           TEXT TYPE CHAR255,
@@ -155,7 +156,7 @@ ENDMODULE.
 MODULE USER_COMMAND_0100 INPUT.
 
   CASE OK_CODE.
-    WHEN 'BACK'.
+    WHEN 'BACK' OR 'CANC'.
       LEAVE TO SCREEN 0.
     WHEN 'LEFT'.
       PERFORM RUN USING : GO_ALV_GIRD_L GO_EDIT_L.
@@ -363,6 +364,74 @@ ENDFORM.
 FORM RUN  USING PO_GRID TYPE REF TO CL_GUI_ALV_GRID
                 PO_EDIT TYPE REF TO CL_GUI_ABAPEDIT.
 
+  DATA : LT_EDIT   TYPE TY_EDIT,
+         LR_T_GRID TYPE REF TO DATA,
+         LV_TITLE  TYPE LVC_TITLE.
 
+  TRY.
+
+      PO_EDIT->GET_TEXT(
+        IMPORTING
+          TABLE                  = LT_EDIT    " document text
+        EXCEPTIONS
+          ERROR_DP               = 1
+          ERROR_CNTL_CALL_METHOD = 2
+          OTHERS                 = 3
+      ).
+
+    CATCH CX_ROOT.
+
+  ENDTRY.
+
+  IF LT_EDIT IS INITIAL.
+    EXIT.
+  ENDIF.
+
+  PERFORM _RUN USING LT_EDIT
+                     PO_EDIT
+            CHANGING LR_T_GRID
+                     LV_TITLE.
+
+
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  _RUN
+*&---------------------------------------------------------------------*
+FORM _RUN  USING    PT_EDIT    TYPE TY_EDIT
+                    PO_EDIT    TYPE REF TO CL_GUI_ABAPEDIT
+           CHANGING PR_T_GRID  TYPE REF TO DATA
+                    PV_TITLE   TYPE LVC_TITLE.
+
+  DATA : LT_REPORT TYPE TABLE OF CHAR255.
+
+  LT_REPORT = VALUE #( ( 'REPORT ZSQL_SUBROUTINEPOOL.' )
+                       ( 'FORM GET_DATA CHANGING CR_T_GRID TYPE REF TO DATA.' )
+                       (   'TRY.' ) ).
+
+  LT_REPORT = VALUE #( BASE LT_REPORT
+                       FOR <LS_EDIT> IN PT_EDIT
+                       ( CONV CHAR255( <LS_EDIT>-TEXT ) ) ##OPERATOR[CHAR255]
+              ).
+  LT_REPORT = VALUE #( BASE LT_REPORT
+                       (   'CATCH CX_ROOT.' )
+                       (   'ENDTRY.' )
+
+                       (   |FIELD-SYMBOLS <LT_DATA> TYPE ANY.| )
+                       (   |ASSIGN ('{ TEMPORARY_ITAB_NAME }') TO <LT_DATA>.| )
+                       (   |IF SY-SUBRC <> 0.| )
+                       (     |DATA LR_T_DUMMY TYPE REF TO DATA.| )
+                       (     |DATA: BEGIN OF LS_DUMMY| )
+                       (     |, DUMMY TYPE STRING.| )
+                       (     |DATA END   OF LS_DUMMY.| )
+                       (     |CREATE DATA LR_T_DUMMY LIKE STANDARD TABLE OF LS_DUMMY.| )
+                       (     |ASSIGN LR_T_DUMMY->* TO <LT_DATA>.| )
+                       (   |ENDIF.| )
+
+                       (   |CREATE DATA CR_T_GRID LIKE <LT_DATA>.| )
+                       (   |ASSIGN CR_T_GRID->* TO FIELD-SYMBOL(<LT_GRID>).| )
+                       (   |<LT_GRID> = <LT_DATA>.| )
+                       ( 'ENDFORM.' ) ).
 
 ENDFORM.
