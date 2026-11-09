@@ -25,17 +25,20 @@ DATA : EXIST_SAVING_TABLE,
        OK_CODE TYPE SY-UCOMM.
 
 " ALV
-DATA : GS_LAYO         TYPE LVC_S_LAYO,
+DATA : GS_LAYO             TYPE LVC_S_LAYO,
        GV_SAVE,
-       GS_VARIANT      TYPE DISVARIANT,
-       GO_DOCKING      TYPE REF TO CL_GUI_DOCKING_CONTAINER,
-       GO_SPLITTER     TYPE REF TO CL_GUI_SPLITTER_CONTAINER,
-       GO_CONTAINER_RU TYPE REF TO CL_GUI_CONTAINER,
-       GO_CONTAINER_RD TYPE REF TO CL_GUI_CONTAINER,
-       GO_CONTAINER_LU TYPE REF TO CL_GUI_CONTAINER,
-       GO_CONTAINER_LD TYPE REF TO CL_GUI_CONTAINER,
-       GO_ALV_GIRD_L   TYPE REF TO CL_GUI_ALV_GRID,
-       GO_ALV_GIRD_R   TYPE REF TO CL_GUI_ALV_GRID.
+       GS_VARIANT          TYPE DISVARIANT,
+       GO_DOCKING          TYPE REF TO CL_GUI_DOCKING_CONTAINER,
+       GO_TREE_SPLITTER    TYPE REF TO CL_GUI_SPLITTER_CONTAINER,
+       GO_CONTAINER_TREE   TYPE REF TO CL_GUI_CONTAINER,
+       GO_CONTAINER_EDITOR TYPE REF TO CL_GUI_CONTAINER,
+       GO_SPLITTER         TYPE REF TO CL_GUI_SPLITTER_CONTAINER,
+       GO_CONTAINER_RU     TYPE REF TO CL_GUI_CONTAINER,
+       GO_CONTAINER_RD     TYPE REF TO CL_GUI_CONTAINER,
+       GO_CONTAINER_LU     TYPE REF TO CL_GUI_CONTAINER,
+       GO_CONTAINER_LD     TYPE REF TO CL_GUI_CONTAINER,
+       GO_ALV_GIRD_L       TYPE REF TO CL_GUI_ALV_GRID,
+       GO_ALV_GIRD_R       TYPE REF TO CL_GUI_ALV_GRID.
 
 " ABAP Editor
 DATA : GO_EDIT_L      TYPE REF TO CL_GUI_ABAPEDIT,
@@ -47,6 +50,7 @@ DATA : GO_EDIT_L      TYPE REF TO CL_GUI_ABAPEDIT,
 CONSTANTS : SAVING_TABLE_NAME      TYPE TABNAME   VALUE 'ZSMCHO_SQL',
             CLIENT_FIELDNAME       TYPE FIELDNAME VALUE 'MANDT',
             USER_FIELDNAME         TYPE FIELDNAME VALUE 'ZUSER',
+            TITLE_FIELDNAME        TYPE FIELDNAME VALUE 'TITLE',
             DATA_FIELDNAME_L       TYPE FIELDNAME VALUE 'DATA_LEFT',
             DATA_FIELDNAME_R       TYPE FIELDNAME VALUE 'DATA_RIGHT',
             ABAP_EDITOR_MAX_LENGTH TYPE I VALUE 255,
@@ -87,18 +91,20 @@ FORM CHECK_DBTAB_EXIST .
                       AND _B~AS4LOCAL = _A~AS4LOCAL
                       AND _B~AS4VERS  = _A~AS4VERS
                       AND _A~TABNAME  = @SAVING_TABLE_NAME )
-      JOIN  DD03L AS B ON B~FIELDNAME = @CLIENT_FIELDNAME
+       JOIN DD03L AS B ON B~FIELDNAME = @CLIENT_FIELDNAME
                       AND B~TABNAME   = _A~TABNAME
                       AND B~DOMNAME   = 'MANDT'
-      JOIN  DD03L AS C ON C~FIELDNAME = @USER_FIELDNAME
+       JOIN DD03L AS C ON C~FIELDNAME = @USER_FIELDNAME
                       AND C~TABNAME   = _A~TABNAME
                       AND C~DOMNAME   = 'SYCHAR12'
-      JOIN  DD03L AS D ON D~FIELDNAME = @DATA_FIELDNAME_L
-                      AND D~TABNAME   = _A~TABNAME
-                      AND D~DOMNAME   = 'RAWSTRING'
-      JOIN  DD03L AS E ON E~FIELDNAME = @DATA_FIELDNAME_R
+       JOIN DD03L AS D ON D~FIELDNAME = @TITLE_FIELDNAME
+                      AND D~TABNAME = _A~TABNAME
+       JOIN DD03L AS E ON E~FIELDNAME = @DATA_FIELDNAME_L
                       AND E~TABNAME   = _A~TABNAME
                       AND E~DOMNAME   = 'RAWSTRING'
+       JOIN DD03L AS F ON F~FIELDNAME = @DATA_FIELDNAME_R
+                      AND F~TABNAME   = _A~TABNAME
+                      AND F~DOMNAME   = 'RAWSTRING'
   INTO @DATA(LV_COUNT).
 
   IF SY-SUBRC EQ 0.
@@ -176,6 +182,10 @@ ENDMODULE.
 FORM CREATE_OBJECT .
 
   PERFORM CREATE_CONTAINER.
+
+  " Splitter Container
+  PERFORM SET_SPLITTER.
+
   PERFORM CREATE_GUI_EDITOR USING : GO_EDIT_L GO_CONTAINER_LU GO_COMPLETER_L,
                                     GO_EDIT_R GO_CONTAINER_RU GO_COMPLETER_R.
   PERFORM SET_GRID USING : GO_CONTAINER_LD GO_ALV_GIRD_L DATA_FIELDNAME_L,
@@ -206,57 +216,22 @@ FORM CREATE_CONTAINER .
                WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
   ENDIF.
 
-  " Splitter Container
-  PERFORM SET_SPLITTER.
-
 ENDFORM.
 *&---------------------------------------------------------------------*
 *&      Form  SET_SPLITTER
 *&---------------------------------------------------------------------*
 FORM SET_SPLITTER .
 
-  CREATE OBJECT GO_SPLITTER
-    EXPORTING
-      PARENT            = GO_DOCKING    " Parent Container
-      ROWS              = 2    " Number of Rows to be displayed
-      COLUMNS           = 2    " Number of Columns to be Displayed
-    EXCEPTIONS
-      CNTL_ERROR        = 1
-      CNTL_SYSTEM_ERROR = 2
-      OTHERS            = 3.
+  IF EXIST_SAVING_TABLE EQ ABAP_TRUE.
+    " Tree는 저장된 데이터가 존재할 때만 생성
+    " Tree Setting을 위한 Splitter Container
+    PERFORM SET_TREE_SPLITTER.
+    PERFORM SET_TREE.
 
-  IF SY-SUBRC <> 0.
-    MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
-               WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
   ENDIF.
 
-  CALL METHOD GO_SPLITTER->GET_CONTAINER
-    EXPORTING
-      ROW       = 1                   " Row
-      COLUMN    = 1                   " Column
-    RECEIVING
-      CONTAINER = GO_CONTAINER_LU.    " Container
-
-  CALL METHOD GO_SPLITTER->GET_CONTAINER
-    EXPORTING
-      ROW       = 1                   " Row
-      COLUMN    = 2                   " Column
-    RECEIVING
-      CONTAINER = GO_CONTAINER_RU.    " Container
-
-  CALL METHOD GO_SPLITTER->GET_CONTAINER
-    EXPORTING
-      ROW       = 2                   " Row
-      COLUMN    = 1                   " Column
-    RECEIVING
-      CONTAINER = GO_CONTAINER_LD.    " Container
-
-  CALL METHOD GO_SPLITTER->GET_CONTAINER
-    EXPORTING
-      ROW       = 2                   " Row
-      COLUMN    = 2                   " Column
-    RECEIVING
-      CONTAINER = GO_CONTAINER_RD.    " Container
+  " Editer를 위한 Splitter Container
+  PERFORM SET_EDITOR_SPLITTER.
 
 ENDFORM.
 *&---------------------------------------------------------------------*
@@ -392,15 +367,49 @@ FORM SET_FIELDCAT USING PR_T_GRID TYPE REF TO DATA
 
   DATA(LO_TABLE) = CAST CL_ABAP_TABLEDESCR( CL_ABAP_TYPEDESCR=>DESCRIBE_BY_DATA( <LT_GRID> ) ).
   DATA(LO_STRUCT) = CAST CL_ABAP_STRUCTDESCR( LO_TABLE->GET_TABLE_LINE_TYPE( ) ).
-  DATA(LT_DATA) = CL_SALV_DATA_DESCR=>READ_STRUCTDESCR( LO_STRUCT ).
 
+  " 동적으로 Field Catalog 생성
+  PT_FCAT = CORRESPONDING #( CL_SALV_DATA_DESCR=>READ_STRUCTDESCR( R_STRUCTDESCR = LO_STRUCT )
+                             MAPPING KEY        = KEYFLAG
+                                     COLTEXT    = FIELDTEXT
+                                     REF_TABLE  = REFTABLE
+                                     REF_FIELD  = REFFIELD
+                                     CFIELDNAME = PRECFIELD
+                                     QFIELDNAME = PRECFIELD ).
+
+  LOOP AT PT_FCAT ASSIGNING FIELD-SYMBOL(<LS_FCAT>).
+    " Option 부여
+    <LS_FCAT>-COL_POS = SY-TABIX.
+    <LS_FCAT>-COL_OPT = ABAP_ON.
+
+  ENDLOOP.
 
 
 ENDFORM.
 *&---------------------------------------------------------------------*
 *&      Form  DISPLAY_ALV
 *&---------------------------------------------------------------------*
-FORM DISPLAY_ALV .
+FORM DISPLAY_ALV USING PV_TITLE  TYPE LVC_TITLE
+                       PO_GRID   TYPE REF TO CL_GUI_ALV_GRID
+              CHANGING PR_T_GRID TYPE REF TO DATA
+                       PT_FCAT   TYPE LVC_T_FCAT.
+
+  FIELD-SYMBOLS <LT_GRID> TYPE ANY TABLE.
+  ASSIGN PR_T_GRID->* TO <LT_GRID>.
+
+  CALL METHOD PO_GRID->SET_TABLE_FOR_FIRST_DISPLAY
+    EXPORTING
+      IS_VARIANT                    = GS_VARIANT  " Layout
+      I_SAVE                        = GV_SAVE     " Save Layout
+      IS_LAYOUT                     = GS_LAYO     " Layout
+    CHANGING
+      IT_OUTTAB                     = <LT_GRID>   " Output Table
+      IT_FIELDCATALOG               = PT_FCAT     " Field Catalog
+    EXCEPTIONS
+      INVALID_PARAMETER_COMBINATION = 1
+      PROGRAM_ERROR                 = 2
+      TOO_MANY_LINES                = 3
+      OTHERS                        = 4.
 
 ENDFORM.
 *&---------------------------------------------------------------------*
@@ -447,7 +456,10 @@ FORM RUN  USING PO_GRID TYPE REF TO CL_GUI_ALV_GRID
   PERFORM SET_LAYO.
   PERFORM SET_FIELDCAT USING LR_T_GRID
                     CHANGING LT_FCAT.
-  PERFORM DISPLAY_ALV.
+  PERFORM DISPLAY_ALV USING LV_TITLE
+                            PO_GRID
+                   CHANGING LR_T_GRID
+                            LT_FCAT.
 
 ENDFORM.
 *&---------------------------------------------------------------------*
@@ -507,5 +519,108 @@ FORM _RUN  USING    PT_EDIT    TYPE TY_EDIT
   IF GS_ERR IS NOT INITIAL.
     RETURN.
   ENDIF.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SET_TREE_SPLITTER
+*&---------------------------------------------------------------------*
+FORM SET_TREE_SPLITTER .
+
+  CREATE OBJECT GO_TREE_SPLITTER
+    EXPORTING
+      PARENT            = GO_DOCKING  " Parent Container
+      ROWS              = 1           " Number of Rows to be displayed
+      COLUMNS           = 2           " Number of Columns to be Displayed
+    EXCEPTIONS
+      CNTL_ERROR        = 1
+      CNTL_SYSTEM_ERROR = 2
+      OTHERS            = 3.
+
+  CALL METHOD GO_TREE_SPLITTER->GET_CONTAINER
+    EXPORTING
+      ROW       = 1                   " Row
+      COLUMN    = 1                   " Column
+    RECEIVING
+      CONTAINER = GO_CONTAINER_TREE.  " Container
+
+  CALL METHOD GO_TREE_SPLITTER->GET_CONTAINER
+    EXPORTING
+      ROW       = 1                     " Row
+      COLUMN    = 2                     " Column
+    RECEIVING
+      CONTAINER = GO_CONTAINER_EDITOR.  " Container
+
+  CALL METHOD GO_TREE_SPLITTER->SET_COLUMN_WIDTH
+    EXPORTING
+      ID    = 1      " Column ID
+      WIDTH = 15.    " NPlWidth
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SET_EDITOR_SPLITTER
+*&---------------------------------------------------------------------*
+FORM SET_EDITOR_SPLITTER .
+
+  IF GO_TREE_SPLITTER IS BOUND.
+
+    CREATE OBJECT GO_SPLITTER
+      EXPORTING
+        PARENT            = GO_CONTAINER_EDITOR  " Parent Container
+        ROWS              = 2                    " Number of Rows to be displayed
+        COLUMNS           = 2                    " Number of Columns to be Displayed
+      EXCEPTIONS
+        CNTL_ERROR        = 1
+        CNTL_SYSTEM_ERROR = 2
+        OTHERS            = 3.
+
+  ELSE.
+
+    CREATE OBJECT GO_SPLITTER
+      EXPORTING
+        PARENT            = GO_DOCKING  " Parent Container
+        ROWS              = 2           " Number of Rows to be displayed
+        COLUMNS           = 2           " Number of Columns to be Displayed
+      EXCEPTIONS
+        CNTL_ERROR        = 1
+        CNTL_SYSTEM_ERROR = 2
+        OTHERS            = 3.
+
+  ENDIF.
+
+  CALL METHOD GO_SPLITTER->GET_CONTAINER
+    EXPORTING
+      ROW       = 1                   " Row
+      COLUMN    = 1                   " Column
+    RECEIVING
+      CONTAINER = GO_CONTAINER_LU.    " Container
+
+  CALL METHOD GO_SPLITTER->GET_CONTAINER
+    EXPORTING
+      ROW       = 1                   " Row
+      COLUMN    = 2                   " Column
+    RECEIVING
+      CONTAINER = GO_CONTAINER_RU.    " Container
+
+  CALL METHOD GO_SPLITTER->GET_CONTAINER
+    EXPORTING
+      ROW       = 2                   " Row
+      COLUMN    = 1                   " Column
+    RECEIVING
+      CONTAINER = GO_CONTAINER_LD.    " Container
+
+  CALL METHOD GO_SPLITTER->GET_CONTAINER
+    EXPORTING
+      ROW       = 2                   " Row
+      COLUMN    = 2                   " Column
+    RECEIVING
+      CONTAINER = GO_CONTAINER_RD.    " Container
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SET_TREE
+*&---------------------------------------------------------------------*
+FORM SET_TREE .
+
+
 
 ENDFORM.
